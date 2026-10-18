@@ -1,0 +1,58 @@
+ECE4016 DNS server - progress and test record
+Date: 2026-10-18 (Asia/Shanghai)
+
+Current implementation (dns_server.py)
+- Listens on 127.0.0.1:1234 over UDP. Handles A queries; other query types return NOTIMP.
+- FLAG=0 asks public recursive DNS servers (Google, Cloudflare, Quad9, OpenDNS).
+- FLAG=1 starts at root DNS servers, follows NS referrals and CNAMEs, and uses
+  glue A records or resolves an NS hostname when glue is unavailable.
+- Prints the IP of every upstream DNS server contacted.
+- Retries a truncated upstream UDP answer over TCP.
+- Caches a resolved IPv4 address in memory. The current cache has no expiry;
+  restarting the process clears it.
+- ValueError messages now explain the failure, and request failures are printed
+  to the server console. Malformed client packets do not terminate the server.
+- The earlier full-packet debug mode was reverted and is not in this version.
+
+Tests performed on Windows
+- Environment: temporary Python 3.9.13 with dnslib 0.9.26. Python 3.9 syntax
+  check passed.
+- Both FLAG modes were tested by sending real UDP DNS requests to a temporary
+  local port. Port 1234 was already occupied by a Python process during this
+  controlled test, so that process was left running.
+- FLAG=0: www.example.com returned an A record (172.66.147.243 in this run);
+  www.baidu.com returned an A record (103.235.47.188 in this run).
+- FLAG=1: www.example.com returned an A record (104.20.23.154 in this run);
+  www.baidu.com returned an A record (183.2.172.177 in this run). The root
+  server's truncated UDP response triggered the TCP retry successfully.
+- A second query for each domain returned the same answer without another
+  upstream query, showing a cache hit.
+- An AAAA query returned NOTIMP. A malformed one-byte request was logged;
+  valid requests still succeeded afterward.
+- A simulated upstream failure produced a ValueError containing its cause.
+- A separate DNS client received NOERROR and an A record from the process on
+  127.0.0.1:1234 for www.example.com and www.iana.org. That running process
+  may have loaded an earlier revision, so this is only a local-port check.
+
+Windows nslookup finding
+- On this computer, nslookup -port=1234 did not test the server on port 1234.
+  A temporary packet-capture server observed nslookup sending to port 53 even
+  when another port was specified. Its "No response from server" output is
+  therefore not evidence that dns_server.py failed or that campus DNS is blocked.
+- The independent Python DNS client did receive a valid reply on port 1234.
+
+Recommended final tests on the Linux computer
+1. Install the dependency: python3 -m pip install dnslib
+2. Set FLAG=0, start the server: python3 dns_server.py
+3. In another terminal run:
+   dig @127.0.0.1 -p 1234 www.example.com A
+   dig @127.0.0.1 -p 1234 www.baidu.com A
+4. Repeat each command and verify that no new upstream server IP is printed.
+5. Stop the server, set FLAG=1, restart it, and repeat both dig commands.
+   Check that the server prints the IPs contacted during iterative lookup.
+
+Still to verify
+- The exact dig commands above have not yet been run on Linux.
+- DNS access from the Linux computer/campus network has not been checked.
+- Answer IPs can change; compare DNS status and presence of an A record,
+  rather than expecting the sample IPs above.
