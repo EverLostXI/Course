@@ -2,6 +2,8 @@ import socket
 from dnslib import A, DNSRecord, QTYPE, RCODE, RR
 
 FLAG = 0
+DEBUG = 1
+SHOW_CACHE_HITS = 1
 cache = {}
 PUBLIC_DNS_SERVERS = [
     ("Google", "8.8.8.8"),
@@ -40,6 +42,8 @@ def ask_server(domain, server_ip, recursive=False):
         response = DNSRecord.parse(data)
     except Exception as e:
         raise ValueError(f"Invalid DNS response from {server_ip}: {e}") from e
+    if DEBUG and not recursive:
+        print(f"Response from {server_ip} (UDP):\n{response}")
 
     if response.header.tc:
         print("UDP response truncated; retrying with TCP:", server_ip)
@@ -52,6 +56,8 @@ def ask_server(domain, server_ip, recursive=False):
             response = DNSRecord.parse(data)
         except Exception as e:
             raise ValueError(f"Invalid TCP DNS response from {server_ip}: {e}") from e
+        if DEBUG and not recursive:
+            print(f"Response from {server_ip} (TCP):\n{response}")
 
     if not response.header.qr:
         raise ValueError(f"DNS response from {server_ip} is not marked as a reply")
@@ -186,6 +192,8 @@ def handle_request(data, addr, server):
     try:
         if domain in cache:
             ip = cache[domain]
+            if SHOW_CACHE_HITS:
+                print(f"Cache hit: {domain} -> {ip}")
 
         else:
             if FLAG == 0:
